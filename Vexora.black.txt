@@ -1,0 +1,276 @@
+--[[ VEXORA | Pitch-Black Starfield UI (Part 1/3) ]]
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local old = PlayerGui:FindFirstChild("VexoraStarBlackUI")
+if old then old:Destroy() end
+
+local C = {
+    Bg     = Color3.fromRGB(8, 8, 10),
+    Header = Color3.fromRGB(14, 14, 18),
+    Card   = Color3.fromRGB(19, 19, 25),
+    Border = Color3.fromRGB(36, 36, 44),
+    Text   = Color3.fromRGB(245, 245, 248),
+    Muted  = Color3.fromRGB(122, 122, 136),
+    Accent = Color3.fromRGB(255, 255, 255),
+    Danger = Color3.fromRGB(225, 65, 75),
+}
+
+local Conns = {}
+local function bind(sig, fn)
+    local c = sig:Connect(fn)
+    table.insert(Conns, c)
+    return c
+end
+
+local function new(cls, props, parent)
+    local inst = Instance.new(cls)
+    for k, v in pairs(props or {}) do inst[k] = v end
+    inst.Parent = parent
+    return inst
+end
+
+local function round(p, r)
+    return new("UICorner", { CornerRadius = UDim.new(0, r or 8) }, p)
+end
+
+local function stroke(p, col)
+    return new("UIStroke", { Color = col or C.Border, Thickness = 1 }, p)
+end
+
+local function tw(obj, t, props, style, dir)
+    local a = TweenService:Create(obj, TweenInfo.new(t or 0.25, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out), props)
+    a:Play()
+    return a
+end
+
+local Gui = new("ScreenGui", {
+    Name = "VexoraStarBlackUI",
+    ResetOnSpawn = false,
+    IgnoreGuiInset = true,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+}, PlayerGui)
+
+local FULL_SIZE = UDim2.fromOffset(420, 255)
+local COLLAPSED_SIZE = UDim2.fromOffset(110, 34)
+local isOpen, isAnimating = true, false
+
+local Main = new("CanvasGroup", {
+    Name = "Main",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.fromScale(0.5, 0.5),
+    Size = FULL_SIZE,
+    BackgroundColor3 = C.Bg,
+    BorderSizePixel = 0,
+    GroupTransparency = 0,
+    ClipsDescendants = true,
+}, Gui)
+round(Main, 12)
+stroke(Main, C.Border)
+
+local Scale = new("UIScale", { Scale = 1 }, Main)
+local function fitScreen()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local vp = cam.ViewportSize
+    Scale.Scale = math.clamp(math.min(vp.X / 460, vp.Y / 300), 0.75, 1.0)
+end
+fitScreen()
+bind(workspace:GetPropertyChangedSignal("CurrentCamera"), fitScreen)
+if workspace.CurrentCamera then
+    bind(workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"), fitScreen)
+end
+--[[ VEXORA | Part 2/3 - Stars, Topbar & Morph Animations ]]
+local StarLayer = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 1 }, Main)
+local stars = {}
+math.randomseed(os.clock() * 1000)
+for i = 1, 22 do
+    local sz = math.random(1, 2)
+    local s = new("Frame", {
+        Size = UDim2.fromOffset(sz, sz),
+        Position = UDim2.fromScale(math.random(), math.random()),
+        BackgroundColor3 = C.Accent,
+        BackgroundTransparency = 0.6,
+        BorderSizePixel = 0,
+        ZIndex = 1,
+    }, StarLayer)
+    round(s, 2)
+    table.insert(stars, { obj = s, sx = math.random(-10, 10)/1000, sy = math.random(-12, -3)/1000, ph = math.random()*6.28 })
+end
+
+bind(RunService.RenderStepped, function(dt)
+    if not isOpen or not Main.Visible then return end
+    local t = os.clock()
+    for _, st in ipairs(stars) do
+        local p = st.obj.Position
+        st.obj.Position = UDim2.fromScale((p.X.Scale + st.sx * dt) % 1, (p.Y.Scale + st.sy * dt) % 1)
+        st.obj.BackgroundTransparency = 0.55 + 0.35 * math.sin(t * 2.2 + st.ph)
+    end
+end)
+
+local Top = new("Frame", { Size = UDim2.new(1, 0, 0, 40), BackgroundColor3 = C.Header, BackgroundTransparency = 0.15, BorderSizePixel = 0, ZIndex = 3 }, Main)
+new("Frame", { Position = UDim2.new(0, 0, 1, -1), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = C.Border, BorderSizePixel = 0, ZIndex = 3 }, Top)
+
+local Badge = new("Frame", { Position = UDim2.fromOffset(10, 9), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = C.Accent, ZIndex = 4 }, Top)
+round(Badge, 6)
+new("TextLabel", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "V", Font = Enum.Font.GothamBlack, TextSize = 13, TextColor3 = C.Bg, ZIndex = 5 }, Badge)
+new("TextLabel", { Position = UDim2.fromOffset(38, 0), Size = UDim2.fromOffset(58, 40), BackgroundTransparency = 1, Text = "Vexora", Font = Enum.Font.GothamBold, TextSize = 14, TextColor3 = C.Text, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4 }, Top)
+
+local NavHost = new("Frame", { Position = UDim2.fromOffset(102, 6), Size = UDim2.new(1, -142, 0, 28), BackgroundTransparency = 1, ZIndex = 4 }, Top)
+local Indicator = new("Frame", { Position = UDim2.new(0, 0, 1, 3), Size = UDim2.fromOffset(44, 2), BackgroundColor3 = C.Accent, BorderSizePixel = 0, ZIndex = 5 }, NavHost)
+round(Indicator, 2)
+new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, NavHost)
+
+local CloseBtn = new("TextButton", { Position = UDim2.new(1, -34, 0, 7), Size = UDim2.fromOffset(26, 26), BackgroundColor3 = C.Card, Text = "×", Font = Enum.Font.GothamMedium, TextSize = 18, TextColor3 = C.Text, AutoButtonColor = false, ZIndex = 4 }, Top)
+round(CloseBtn, 7)
+
+local OpenPill = new("CanvasGroup", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(92, 28), BackgroundColor3 = C.Bg, GroupTransparency = 1, Visible = false }, Gui)
+round(OpenPill, 14)
+stroke(OpenPill, C.Border)
+local PillBtn = new("TextButton", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "✦  Vexora", Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = C.Text, AutoButtonColor = false }, OpenPill)
+
+local function makeDraggable(frame, handle, onClick)
+    local dragging, moved, startPos, startInput
+    bind(handle.InputBegan, function(inp)
+        if inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging, moved, startInput, startPos = true, false, inp.Position, frame.Position
+        end
+    end)
+    bind(UserInputService.InputChanged, function(inp)
+        if dragging and (inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseMovement) then
+            local delta = inp.Position - startInput
+            if delta.Magnitude > 5 then moved = true end
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    bind(UserInputService.InputEnded, function(inp)
+        if inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            if dragging then dragging = false; if not moved and onClick then onClick() end end
+        end
+    end)
+end
+
+local function collapseUI()
+    if isAnimating or not isOpen then return end
+    isAnimating, isOpen = true, false
+    tw(CloseBtn, 0.22, { Rotation = 90, BackgroundColor3 = C.Danger })
+    tw(Main, 0.28, { Size = COLLAPSED_SIZE, GroupTransparency = 1 }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+    task.delay(0.24, function()
+        Main.Visible, CloseBtn.Rotation, CloseBtn.BackgroundColor3 = false, 0, C.Card
+        OpenPill.Visible, OpenPill.Size, OpenPill.GroupTransparency = true, UDim2.fromOffset(64, 22), 1
+        tw(OpenPill, 0.26, { Size = UDim2.fromOffset(92, 28), GroupTransparency = 0 }, Enum.EasingStyle.Back)
+        isAnimating = false
+    end)
+end
+
+local function expandUI()
+    if isAnimating or isOpen then return end
+    isAnimating, isOpen = true, true
+    tw(OpenPill, 0.16, { Size = UDim2.fromOffset(64, 22), GroupTransparency = 1 })
+    task.delay(0.14, function()
+        OpenPill.Visible, Main.Visible, Main.Size, Main.GroupTransparency = false, true, COLLAPSED_SIZE, 1
+        tw(Main, 0.34, { Size = FULL_SIZE, GroupTransparency = 0 }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        task.delay(0.34, function() isAnimating = false end)
+    end)
+end
+
+makeDraggable(Main, Top)
+makeDraggable(OpenPill, PillBtn, expandUI)
+bind(CloseBtn.MouseButton1Click, collapseUI)
+--[[ VEXORA | Part 3/3 - Tabs & Modules ]]
+local Body = new("Frame", { Position = UDim2.fromOffset(8, 46), Size = UDim2.new(1, -16, 1, -54), BackgroundTransparency = 1, ZIndex = 2 }, Main)
+local Pages, Tabs = {}, {}
+
+local function switchTab(name)
+    for k, page in pairs(Pages) do
+        local active = (k == name)
+        page.Visible = active
+        local btn = Tabs[k]
+        tw(btn, 0.18, { BackgroundColor3 = active and C.Card or C.Header, TextColor3 = active and C.Text or C.Muted })
+        if active then
+            tw(Indicator, 0.24, { Position = UDim2.new(0, btn.Position.X.Offset, 1, 3), Size = UDim2.fromOffset(btn.Size.X.Offset, 2) }, Enum.EasingStyle.Back)
+        end
+    end
+end
+
+local function createTopTab(name, width)
+    local btn = new("TextButton", { Size = UDim2.fromOffset(width or 54, 28), BackgroundColor3 = C.Header, Text = name, Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = C.Muted, AutoButtonColor = false, ZIndex = 4 }, NavHost)
+    round(btn, 6)
+    local page = new("ScrollingFrame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageColor3 = C.Muted, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, Visible = false, ZIndex = 2 }, Body)
+    new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, page)
+    Pages[name], Tabs[name] = page, btn
+    bind(btn.MouseButton1Click, function() switchTab(name) end)
+    return page
+end
+
+local pNotes   = createTopTab("Notes", 50)
+local pModules = createTopTab("Modules", 58)
+local pStats   = createTopTab("Stats", 48)
+local pConfig  = createTopTab("Config", 50)
+
+local CodeBox = new("TextBox", { Size = UDim2.new(1, 0, 0, 162), BackgroundColor3 = C.Header, BackgroundTransparency = 0.2, BorderSizePixel = 0, Text = "-- Vexora Workspace\n-- Save test notes or coordinates here.", TextColor3 = C.Text, Font = Enum.Font.Code, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, MultiLine = true, ClearTextOnFocus = false }, pNotes)
+round(CodeBox, 8); border(CodeBox, C.Border)
+new("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8) }, CodeBox)
+
+local Bar = new("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1 }, pNotes)
+new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6) }, Bar)
+
+local function barBtn(text, isPrimary, fn)
+    local b = new("TextButton", { Size = UDim2.new(0.333, -4, 1, 0), BackgroundColor3 = isPrimary and C.Accent or C.Card, Text = text, Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = isPrimary and C.Bg or C.Text, AutoButtonColor = false }, Bar)
+    round(b, 6); if not isPrimary then border(b, C.Border) end
+    bind(b.MouseButton1Click, fn)
+end
+
+barBtn("Print Log", true, function() print("[VEXORA]:\n" .. CodeBox.Text) end)
+barBtn("Copy Pos", false, function()
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then local p = hrp.Position; CodeBox.Text = string.format("Vector3.new(%.1f, %.1f, %.1f)", p.X, p.Y, p.Z) end
+end)
+barBtn("Clear", false, function() CodeBox.Text = "" end)
+
+local function addCard(title, sub, btnTxt, fn)
+    local card = new("Frame", { Size = UDim2.new(1, 0, 0, 44), BackgroundColor3 = C.Header, BackgroundTransparency = 0.2 }, pModules)
+    round(card, 8); border(card, C.Border)
+    new("TextLabel", { Position = UDim2.fromOffset(10, 5), Size = UDim2.new(1, -90, 0, 16), BackgroundTransparency = 1, Text = title, Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = C.Text, TextXAlignment = Enum.TextXAlignment.Left }, card)
+    new("TextLabel", { Position = UDim2.fromOffset(10, 22), Size = UDim2.new(1, -90, 0, 15), BackgroundTransparency = 1, Text = sub, Font = Enum.Font.Gotham, TextSize = 9, TextColor3 = C.Muted, TextXAlignment = Enum.TextXAlignment.Left }, card)
+    local b = new("TextButton", { Position = UDim2.new(1, -74, 0.5, -12), Size = UDim2.fromOffset(64, 24), BackgroundColor3 = C.Accent, Text = btnTxt, Font = Enum.Font.GothamBold, TextSize = 10, TextColor3 = C.Bg, AutoButtonColor = false }, card)
+    round(b, 6); bind(b.MouseButton1Click, fn)
+end
+
+local boost = false
+addCard("FPS Booster", "Disable shadows & lower render level", "Toggle", function()
+    boost = not boost; settings().Rendering.QualityLevel = boost and 1 or 0; game:GetService("Lighting").GlobalShadows = not boost
+end)
+addCard("Camera FOV 95", "Wider peripheral camera angle", "Apply", function()
+    if workspace.CurrentCamera then workspace.CurrentCamera.FieldOfView = 95 end
+end)
+addCard("Reset Camera FOV", "Restore default 70 field of view", "Reset", function()
+    if workspace.CurrentCamera then workspace.CurrentCamera.FieldOfView = 70 end
+end)
+
+local StatCard = new("Frame", { Size = UDim2.new(1, 0, 0, 92), BackgroundColor3 = C.Header, BackgroundTransparency = 0.2 }, pStats)
+round(StatCard, 8); border(StatCard, C.Border)
+local StatLabel = new("TextLabel", { Position = UDim2.fromOffset(10, 8), Size = UDim2.new(1, -20, 1, -16), BackgroundTransparency = 1, Text = "Loading...", Font = Enum.Font.Code, TextSize = 11, TextColor3 = C.Text, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top }, StatCard)
+
+local fps, frames, last = 60, 0, os.clock()
+bind(RunService.RenderStepped, function() frames += 1; if os.clock() - last >= 1 then fps, frames, last = frames, 0, os.clock() end end)
+bind(RunService.Heartbeat, function()
+    if not pStats.Visible or not isOpen then return end
+    local ok, ping = pcall(function() return Stats.Network.ServerStatsItem["Data Ping"]:GetValueString() end)
+    StatLabel.Text = string.format("Player: %s\nPlaceId: %d\nFPS: %d  |  Ping: %s\nMemory: %d MB", LocalPlayer.Name, game.PlaceId, fps, ok and ping or "--", math.floor(Stats:GetTotalMemoryUsageMb()))
+end)
+
+local Unload = new("TextButton", { Size = UDim2.new(1, 0, 0, 34), BackgroundColor3 = C.Card, Text = "Unload Vexora Interface", Font = Enum.Font.GothamBold, TextSize = 11, TextColor3 = C.Danger, AutoButtonColor = false }, pConfig)
+round(Unload, 8); border(Unload, C.Border)
+bind(Unload.MouseButton1Click, function() for _, c in ipairs(Conns) do pcall(function() c:Disconnect() end) end; Gui:Destroy() end)
+
+Main.Size, Main.GroupTransparency = COLLAPSED_SIZE, 1
+tw(Main, 0.35, { Size = FULL_SIZE, GroupTransparency = 0 }, Enum.EasingStyle.Back)
+task.defer(function() switchTab("Notes") end)
+
